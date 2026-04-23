@@ -1,0 +1,16 @@
+# Compiled binaries
+/teamwork
+/teamwork-darwin-*
+/teamwork-linux-*
+/teamwork-windows-*
+
+# goreleaser output
+/dist/
+
+# macOS
+.DS_Store
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
