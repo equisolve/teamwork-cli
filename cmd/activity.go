@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/equisolve/teamwork-cli/internal/format"
 	"github.com/spf13/cobra"
@@ -41,6 +42,11 @@ func runActivity(cmd *cobra.Command, args []string) {
 
 	data, err := client.Get(path, params)
 	if err != nil {
+		if strings.Contains(err.Error(), "Client.Timeout") || strings.Contains(err.Error(), "deadline exceeded") {
+			if projectQ, _ := cmd.Flags().GetString("project"); projectQ == "" {
+				fmt.Fprintln(os.Stderr, "Hint: /latestActivity.json (unscoped) can hang on large tenants. Try --project <name>.")
+			}
+		}
 		exitOnError(err)
 	}
 	if mode == format.JSON {
@@ -48,16 +54,20 @@ func runActivity(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	// Field names here are the v1 response shape (mostly lowercase-no-hyphen
+	// despite Teamwork's usual kebab-case). `activitytype` is the verb
+	// (new/updated/completed/reopened); `type` is the object (task, message,
+	// comment…).
 	var resp struct {
 		Activity []struct {
-			ID          json.Number `json:"id"`
-			Type        string      `json:"activity-type"`
-			Action      string      `json:"action"`
-			DateTime    string      `json:"datetime"`
-			ProjectName string      `json:"project-name"`
-			CompanyName string      `json:"company-name"`
-			ForUser     string      `json:"for-user-name"`
-			Description string      `json:"description"`
+			ID           json.Number `json:"id"`
+			ActivityType string      `json:"activitytype"`
+			Type         string      `json:"type"`
+			DateTime     string      `json:"datetime"`
+			ProjectName  string      `json:"project-name"`
+			CompanyName  string      `json:"company-name"`
+			ForUserName  string      `json:"forusername"`
+			Description  string      `json:"description"`
 		} `json:"activity"`
 	}
 	_ = json.Unmarshal(data, &resp)
@@ -68,8 +78,8 @@ func runActivity(cmd *cobra.Command, args []string) {
 		rows[i] = []string{
 			formatDate(a.DateTime),
 			format.Truncate(a.ProjectName, 20),
-			format.Truncate(a.ForUser, 18),
-			a.Action,
+			format.Truncate(a.ForUserName, 18),
+			a.ActivityType,
 			format.Truncate(a.Type, 15),
 			format.Truncate(a.Description, 40),
 		}

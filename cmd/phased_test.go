@@ -115,12 +115,16 @@ func TestSearch_Tasks(t *testing.T) {
 }
 
 func TestActivity_Global(t *testing.T) {
+	// Fixture uses the real v1 /latestActivity.json shape:
+	// `activitytype` (verb), `type` (object), `forusername`, `datetime`,
+	// `project-name`. The CLI used to look for `activity-type` / `action` /
+	// `for-user-name`, which silently blanked the USER / ACTION / TYPE columns.
 	srv := newTestServer(t)
 	srv.handle("GET", "/latestActivity.json", `{
 		"activity": [
-			{"id": "1", "action": "completed", "activity-type": "task",
+			{"id": "1", "activitytype": "completed", "type": "task",
 			 "datetime": "2026-04-22T10:00:00Z", "project-name": "Acme",
-			 "for-user-name": "Ada Lovelace", "description": "Ship it"}
+			 "forusername": "Ada Lovelace", "description": "Ship it"}
 		]
 	}`)
 	out, _, code := runCLI(t, srv, "activity")
