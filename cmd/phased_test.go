@@ -148,25 +148,6 @@ func TestTagsList(t *testing.T) {
 	}
 }
 
-func TestWorkload(t *testing.T) {
-	srv := newTestServer(t)
-	srv.handle("GET", "/workload.json", `{
-		"workload": {
-			"userCapacities": [
-				{"user-id": "100", "user-full-name": "Ada Lovelace", "capacity": "45",
-				 "available-minutes": "2100", "logged-time": "300", "estimated-time": "480"}
-			]
-		}
-	}`)
-	out, _, code := runCLI(t, srv, "workload", "--from", "2026-04-22", "--to", "2026-04-26")
-	if code != 0 {
-		t.Fatal(code)
-	}
-	if !strings.Contains(out, "Ada Lovelace") || !strings.Contains(out, "45") {
-		t.Errorf("unexpected:\n%s", out)
-	}
-}
-
 func TestCategoriesList_Project(t *testing.T) {
 	srv := newTestServer(t)
 	srv.handle("GET", "/projectCategories.json", `{

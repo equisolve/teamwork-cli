@@ -47,10 +47,10 @@ var tasksCompleteCmd = &cobra.Command{
 func init() {
 	tasksListCmd.Flags().StringP("project", "p", "", "Filter by project ID or name")
 	tasksListCmd.Flags().String("assignee", "", "Filter by assignee ID, name, email, or 'me'")
-	tasksListCmd.Flags().String("status", "", "Filter by status: new, reopened, completed, deleted")
-	tasksListCmd.Flags().Bool("completed", false, "Include completed tasks")
-	tasksListCmd.Flags().String("due-from", "", "Due date range start YYYY-MM-DD")
-	tasksListCmd.Flags().String("due-to", "", "Due date range end YYYY-MM-DD")
+	tasksListCmd.Flags().String("status", "", "Preset filter: upcoming, late (v3 ignores other values)")
+	tasksListCmd.Flags().Bool("completed", false, "Show only completed tasks (due-from/due-to filter by completion date)")
+	tasksListCmd.Flags().String("due-from", "", "Due date range start YYYY-MM-DD (completion date when --completed)")
+	tasksListCmd.Flags().String("due-to", "", "Due date range end YYYY-MM-DD (completion date when --completed)")
 	tasksListCmd.Flags().Int("page", 1, "Page number")
 	tasksListCmd.Flags().Int("page-size", 50, "Results per page")
 
@@ -77,19 +77,29 @@ func runTasksList(cmd *cobra.Command, args []string) {
 		if err != nil {
 			exitOnError(err)
 		}
-		params.Set("assignedToUserIds", fmt.Sprintf("%d", uid))
+		params.Set("responsiblePartyIds", fmt.Sprintf("%d", uid))
 	}
 	if v, _ := cmd.Flags().GetString("status"); v != "" {
 		params.Set("status", v)
 	}
-	if v, _ := cmd.Flags().GetBool("completed"); v {
+	onlyCompleted, _ := cmd.Flags().GetBool("completed")
+	dueFrom, _ := cmd.Flags().GetString("due-from")
+	dueTo, _ := cmd.Flags().GetString("due-to")
+	if onlyCompleted {
 		params.Set("includeCompletedTasks", "true")
-	}
-	if v, _ := cmd.Flags().GetString("due-from"); v != "" {
-		params.Set("startDate", strings.ReplaceAll(v, "-", ""))
-	}
-	if v, _ := cmd.Flags().GetString("due-to"); v != "" {
-		params.Set("endDate", strings.ReplaceAll(v, "-", ""))
+		if dueFrom != "" {
+			params.Set("completedAfter", dueFrom)
+		}
+		if dueTo != "" {
+			params.Set("completedBefore", dueTo)
+		}
+	} else {
+		if dueFrom != "" {
+			params.Set("startDate", dueFrom)
+		}
+		if dueTo != "" {
+			params.Set("endDate", dueTo)
+		}
 	}
 	page, _ := cmd.Flags().GetInt("page")
 	pageSize, _ := cmd.Flags().GetInt("page-size")
@@ -132,6 +142,16 @@ func runTasksList(cmd *cobra.Command, args []string) {
 		exitFn(1)
 	}
 	included := api.ParseIncluded(data)
+
+	if onlyCompleted {
+		filtered := resp.Tasks[:0]
+		for _, t := range resp.Tasks {
+			if t.Status == "completed" {
+				filtered = append(filtered, t)
+			}
+		}
+		resp.Tasks = filtered
+	}
 
 	headers := []string{"ID", "TASK", "ASSIGNEE", "DUE", "PRIORITY", "STATUS"}
 	rows := make([][]string, len(resp.Tasks))
