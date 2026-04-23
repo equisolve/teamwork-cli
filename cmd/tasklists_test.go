@@ -20,10 +20,15 @@ func TestTasklistsList_ByProjectName(t *testing.T) {
 	if code != 0 {
 		t.Fatal(code)
 	}
-	for _, want := range []string{"Admin", "Reports", "100", "101"} {
+	for _, want := range []string{"Admin", "Reports", "100", "101", "COMPLETE"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in output:\n%s", want, out)
 		}
+	}
+	// The DONE header was misleading — it never carried a done-count, only
+	// the whole-list `complete` flag. Guard against a regression.
+	if strings.Contains(out, "DONE") {
+		t.Errorf("expected renamed column, still saw DONE:\n%s", out)
 	}
 }
 

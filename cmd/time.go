@@ -100,7 +100,8 @@ func runTimeList(cmd *cobra.Command, args []string) {
 			ID          json.Number `json:"id"`
 			Date        string      `json:"date"`
 			Description string      `json:"description"`
-			PersonName  string      `json:"person-full-name"`
+			PersonFirst string      `json:"person-first-name"`
+			PersonLast  string      `json:"person-last-name"`
 			ProjectName string      `json:"project-name"`
 			TodoName    string      `json:"todo-item-name"`
 			Hours       json.Number `json:"hours"`
@@ -127,7 +128,7 @@ func runTimeList(cmd *cobra.Command, args []string) {
 		rows[i] = []string{
 			e.ID.String(),
 			formatDate(e.Date),
-			format.Truncate(e.PersonName, 20),
+			format.Truncate(strings.TrimSpace(e.PersonFirst+" "+e.PersonLast), 20),
 			format.Truncate(e.ProjectName, 20),
 			format.Truncate(e.TodoName, 20),
 			dur,

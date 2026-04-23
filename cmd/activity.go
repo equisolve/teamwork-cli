@@ -57,7 +57,8 @@ func runActivity(cmd *cobra.Command, args []string) {
 	// Field names here are the v1 response shape (mostly lowercase-no-hyphen
 	// despite Teamwork's usual kebab-case). `activitytype` is the verb
 	// (new/updated/completed/reopened); `type` is the object (task, message,
-	// comment…).
+	// comment…). USER is the actor (`fromusername`); `forusername` is the
+	// target and is empty for most activity types, e.g. `completed`.
 	var resp struct {
 		Activity []struct {
 			ID           json.Number `json:"id"`
@@ -66,6 +67,7 @@ func runActivity(cmd *cobra.Command, args []string) {
 			DateTime     string      `json:"datetime"`
 			ProjectName  string      `json:"project-name"`
 			CompanyName  string      `json:"company-name"`
+			FromUserName string      `json:"fromusername"`
 			ForUserName  string      `json:"forusername"`
 			Description  string      `json:"description"`
 		} `json:"activity"`
@@ -75,10 +77,14 @@ func runActivity(cmd *cobra.Command, args []string) {
 	headers := []string{"WHEN", "PROJECT", "USER", "ACTION", "TYPE", "DESC"}
 	rows := make([][]string, len(resp.Activity))
 	for i, a := range resp.Activity {
+		user := a.FromUserName
+		if user == "" {
+			user = a.ForUserName
+		}
 		rows[i] = []string{
 			formatDate(a.DateTime),
 			format.Truncate(a.ProjectName, 20),
-			format.Truncate(a.ForUserName, 18),
+			format.Truncate(user, 18),
 			a.ActivityType,
 			format.Truncate(a.Type, 15),
 			format.Truncate(a.Description, 40),

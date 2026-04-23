@@ -43,20 +43,65 @@ func runFilesList(cmd *cobra.Command, args []string) {
 	client := getClient()
 	mode := getOutputMode()
 	params := url.Values{}
-	params.Set("include", "projects")
-
-	if v, _ := cmd.Flags().GetString("project"); v != "" {
-		pid, err := getResolver().Project(v)
-		if err != nil {
-			exitOnError(err)
-		}
-		params.Set("projectIds", fmt.Sprintf("%d", pid))
-	}
 	page, _ := cmd.Flags().GetInt("page")
 	pageSize, _ := cmd.Flags().GetInt("page-size")
 	params.Set("page", fmt.Sprintf("%d", page))
 	params.Set("pageSize", fmt.Sprintf("%d", pageSize))
 
+	// v3 /files.json silently ignores `projectIds`, so when the caller scopes
+	// by project we use the v1 /projects/<id>/files.json endpoint instead.
+	projectQ, _ := cmd.Flags().GetString("project")
+	if projectQ != "" {
+		pid, err := getResolver().Project(projectQ)
+		if err != nil {
+			exitOnError(err)
+		}
+		data, err := client.Get(fmt.Sprintf("/projects/%d/files.json", pid), params)
+		if err != nil {
+			exitOnError(err)
+		}
+		if mode == format.JSON {
+			format.PrintJSON(data)
+			return
+		}
+		var v1 struct {
+			Project struct {
+				Name  string `json:"name"`
+				Files []struct {
+					ID           json.Number `json:"id"`
+					Name         string      `json:"name"`
+					OriginalName string      `json:"originalName"`
+					Description  string      `json:"description"`
+					Version      json.Number `json:"version"`
+				} `json:"files"`
+			} `json:"project"`
+		}
+		_ = json.Unmarshal(data, &v1)
+		headers := []string{"ID", "NAME", "VERSION", "PROJECT", "DESCRIPTION"}
+		rows := make([][]string, len(v1.Project.Files))
+		for i, f := range v1.Project.Files {
+			name := f.Name
+			if name == "" {
+				name = f.OriginalName
+			}
+			rows[i] = []string{
+				f.ID.String(),
+				format.Truncate(name, 35),
+				f.Version.String(),
+				format.Truncate(v1.Project.Name, 25),
+				format.Truncate(f.Description, 35),
+			}
+		}
+		if mode == format.CSV {
+			format.PrintCSV(headers, rows)
+		} else {
+			format.PrintTable(os.Stdout, headers, rows)
+			fmt.Printf("\nPage %d · %d file(s)\n", page, len(rows))
+		}
+		return
+	}
+
+	params.Set("include", "projects")
 	data, err := client.Get("/projects/api/v3/files.json", params)
 	if err != nil {
 		exitOnError(err)

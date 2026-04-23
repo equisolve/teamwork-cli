@@ -87,7 +87,9 @@ func runTasklistsList(cmd *cobra.Command, args []string) {
 		exitFn(1)
 	}
 
-	headers := []string{"ID", "NAME", "OPEN TASKS", "DONE"}
+	// The v1 payload carries `uncompleted-count` but no completed-task count,
+	// so we surface `complete` (a yes/no flag for the whole list) instead.
+	headers := []string{"ID", "NAME", "OPEN TASKS", "COMPLETE"}
 	rows := make([][]string, len(resp.Tasklists))
 	for i, tl := range resp.Tasklists {
 		done := ""

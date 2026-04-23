@@ -67,6 +67,54 @@ func TestFilesList(t *testing.T) {
 	}
 }
 
+func TestFilesList_ByProjectName(t *testing.T) {
+	// v3 /files.json ignores `projectIds`, so when the caller scopes by
+	// project we must hit the v1 /projects/<id>/files.json endpoint.
+	// Fixture uses the real v1 nested `project.files[]` shape.
+	srv := newTestServer(t)
+	srv.handle("GET", "/projects.json", `{"projects":[{"id":"10","name":"Acme"}]}`)
+	srv.handle("GET", "/projects/10/files.json", `{
+		"project": {
+			"id": "10", "name": "Acme",
+			"files": [
+				{"id": "7", "name": "spec.pdf", "originalName": "spec.pdf",
+				 "version": "3", "project-id": "10", "description": "Design spec"}
+			]
+		}
+	}`)
+	out, _, code := runCLI(t, srv, "files", "list", "--project", "Acme")
+	if code != 0 {
+		t.Fatal(code)
+	}
+	for _, want := range []string{"spec.pdf", "Acme", "Design spec"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestTimeList_PersonColumn(t *testing.T) {
+	// v1 /time_entries.json returns `person-first-name` + `person-last-name`
+	// — not a combined `person-full-name`, which is what the parser used to
+	// read and which left the PERSON column blank in production.
+	srv := newTestServer(t)
+	srv.handle("GET", "/time_entries.json", `{
+		"time-entries": [
+			{"id": "1", "date": "2026-04-22T00:00:00Z",
+			 "person-first-name": "Ada", "person-last-name": "Lovelace",
+			 "project-name": "Acme", "todo-item-name": "Do X",
+			 "hours": "1", "minutes": "30", "isbillable": "1"}
+		]
+	}`)
+	out, _, code := runCLI(t, srv, "time", "list")
+	if code != 0 {
+		t.Fatal(code)
+	}
+	if !strings.Contains(out, "Ada Lovelace") {
+		t.Errorf("PERSON column should show 'Ada Lovelace':\n%s", out)
+	}
+}
+
 func TestNotebooksList(t *testing.T) {
 	srv := newTestServer(t)
 	srv.handle("GET", "/projects/api/v3/notebooks.json", `{
@@ -115,16 +163,19 @@ func TestSearch_Tasks(t *testing.T) {
 }
 
 func TestActivity_Global(t *testing.T) {
-	// Fixture uses the real v1 /latestActivity.json shape:
-	// `activitytype` (verb), `type` (object), `forusername`, `datetime`,
-	// `project-name`. The CLI used to look for `activity-type` / `action` /
-	// `for-user-name`, which silently blanked the USER / ACTION / TYPE columns.
+	// Fixture mirrors a live /latestActivity.json row:
+	//   `activitytype` (verb), `type` (object), `project-name`, `datetime`,
+	//   `fromusername` (actor), `forusername` (target — empty for most
+	//   actions like `completed`).
+	// The USER column must surface the actor; reading `forusername` would
+	// leave it blank here, just like it does in production.
 	srv := newTestServer(t)
 	srv.handle("GET", "/latestActivity.json", `{
 		"activity": [
 			{"id": "1", "activitytype": "completed", "type": "task",
 			 "datetime": "2026-04-22T10:00:00Z", "project-name": "Acme",
-			 "forusername": "Ada Lovelace", "description": "Ship it"}
+			 "fromusername": "Ada Lovelace", "forusername": "",
+			 "description": "Ship it"}
 		]
 	}`)
 	out, _, code := runCLI(t, srv, "activity")
@@ -214,8 +265,11 @@ func TestRisksList_Empty(t *testing.T) {
 
 func TestTemplatesList(t *testing.T) {
 	srv := newTestServer(t)
+	// v3 returns templates under the "projects" key (templates are projects with
+	// isTemplate=true), captured from a live response.
 	srv.handle("GET", "/projects/api/v3/projects/templates.json", `{
-		"templates": [{"id": 1, "name": "Standard IR", "description": "Investor relations template"}]
+		"projects": [{"id": 1, "name": "Standard IR", "description": "Investor relations template"}],
+		"meta": {"page": {"count": 1}}
 	}`)
 	out, _, code := runCLI(t, srv, "templates", "list")
 	if code != 0 {

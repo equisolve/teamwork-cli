@@ -2,6 +2,21 @@
 
 All notable changes to `teamwork-cli`. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.3] — 2026-04-23
+
+Six more bugs surfaced by a second round of live testing.
+
+### Fixed
+- **`time list`** — `PERSON` column was always empty. Parser read `person-full-name`; the v1 response splits the name across `person-first-name` and `person-last-name`.
+- **`activity`** — `USER` column was empty on half the rows (actions like `completed`, `updated`). Parser read `forusername` (the target of the activity, mostly empty); the actor lives in `fromusername`. Falls back to `forusername` when it's the only one present.
+- **`files list --project`** — the v3 `/files.json` endpoint silently ignored `projectIds`, so scoped calls returned every file in the tenant (173k at Equisolve). Scoped listings now hit v1 `/projects/<id>/files.json`; unscoped listings still use v3.
+- **`templates list`** — always printed `No results.` / `0 template(s)` despite a populated tenant. The parser read `templates[]`; v3 returns templates under the `projects` key (templates are projects with `isTemplate=true`).
+- **`templates show`** — printed nothing. Same root cause: read `template`, real payload is `project`.
+- **`tasklists list`** — the `DONE` column was misleading. v1 `/tasklists.json` only returns `uncompleted-count` and a whole-list `complete` flag, never a done count. Renamed the column to `COMPLETE` so the "Y" you see lines up with its actual meaning.
+
+### Note
+Of the templates bug, the pre-existing unit test hand-rolled a `{"templates": [...]}` fixture that matched the mistaken parser — another "fictional fixture" case like the four called out in v0.2.2. Fixture rewritten against a live response.
+
 ## [v0.2.2] — 2026-04-23
 
 Seven mutation-surface bugs surfaced by end-to-end live testing against Teamwork.

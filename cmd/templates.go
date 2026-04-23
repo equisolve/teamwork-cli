@@ -44,12 +44,14 @@ func runTemplatesList(cmd *cobra.Command, args []string) {
 		format.PrintJSON(data)
 		return
 	}
+	// v3 returns templates under the "projects" key (templates are projects
+	// with isTemplate=true), not "templates".
 	var resp struct {
 		Templates []struct {
 			ID          int    `json:"id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
-		} `json:"templates"`
+		} `json:"projects"`
 	}
 	_ = json.Unmarshal(data, &resp)
 	headers := []string{"ID", "NAME", "DESCRIPTION"}
@@ -81,7 +83,9 @@ func runTemplatesShow(cmd *cobra.Command, args []string) {
 		return
 	}
 	wrap, _ := decodeMap(data)
-	t, _ := wrap["template"].(map[string]interface{})
+	// v3 returns the template under "project" (templates are projects with
+	// isTemplate=true).
+	t, _ := wrap["project"].(map[string]interface{})
 	if t == nil {
 		format.PrintJSON(data)
 		return
