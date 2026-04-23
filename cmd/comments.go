@@ -105,12 +105,16 @@ func runCommentsList(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	// v1 /<resource>/<id>/comments.json returns author-firstname and
+	// author-lastname (no combined author-fullname field).
 	var resp struct {
 		Comments []struct {
-			ID         json.Number `json:"id"`
-			AuthorName string      `json:"author-fullname"`
-			DateTime   string      `json:"datetime"`
-			Body       string      `json:"body"`
+			ID            json.Number `json:"id"`
+			AuthorFirst   string      `json:"author-firstname"`
+			AuthorLast    string      `json:"author-lastname"`
+			AuthorCompany string      `json:"author-company"`
+			DateTime      string      `json:"datetime"`
+			Body          string      `json:"body"`
 		} `json:"comments"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
@@ -121,9 +125,10 @@ func runCommentsList(cmd *cobra.Command, args []string) {
 	headers := []string{"ID", "AUTHOR", "WHEN", "BODY"}
 	rows := make([][]string, len(resp.Comments))
 	for i, c := range resp.Comments {
+		author := strings.TrimSpace(c.AuthorFirst + " " + c.AuthorLast)
 		rows[i] = []string{
 			c.ID.String(),
-			format.Truncate(c.AuthorName, 25),
+			format.Truncate(author, 25),
 			formatDate(c.DateTime),
 			format.Truncate(strings.ReplaceAll(c.Body, "\n", " "), 60),
 		}

@@ -183,15 +183,28 @@ func runTasksSubtasks(cmd *cobra.Command, args []string) {
 	client := getClient()
 	add, _ := cmd.Flags().GetString("add")
 	if add != "" {
-		body := map[string]interface{}{
-			"todo-item": map[string]interface{}{
-				"content": add,
-			},
+		// Split on newline or literal ~|~; one POST per subtask.
+		raw := strings.ReplaceAll(add, "~|~", "\n")
+		var names []string
+		for _, line := range strings.Split(raw, "\n") {
+			if s := strings.TrimSpace(line); s != "" {
+				names = append(names, s)
+			}
 		}
-		if _, err := client.Post("/tasks/"+args[0]+"/quickadd.json", nil, body); err != nil {
-			exitOnError(err)
+		if len(names) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: --add produced no non-empty subtask names")
+			exitFn(1)
 		}
-		fmt.Println("Subtasks added.")
+		path := "/projects/api/v3/tasks/" + args[0] + "/subtasks.json"
+		for _, name := range names {
+			body := map[string]interface{}{
+				"task": map[string]interface{}{"name": name},
+			}
+			if _, err := client.Post(path, nil, body); err != nil {
+				exitOnError(err)
+			}
+		}
+		fmt.Printf("Added %d subtask(s).\n", len(names))
 		return
 	}
 

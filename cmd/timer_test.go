@@ -46,6 +46,12 @@ func TestTimerList_WithIncluded(t *testing.T) {
 
 func TestTimerStart_WithTaskID(t *testing.T) {
 	srv := newTestServer(t)
+	// Task lookup is called to derive projectId — the v3 task resource has
+	// no top-level projectId; the project arrives via included sideload.
+	srv.handle("GET", "/projects/api/v3/tasks/28989564.json", `{
+		"task": {"id":28989564,"tasklistId":1702954},
+		"included": {"projects": {"445082": {"id": 445082, "name": "Accounting"}}}
+	}`)
 	srv.handle("POST", "/projects/api/v3/me/timers.json", `{"timer":{"id":74121,"running":true}}`)
 
 	out, _, code := runCLI(t, srv, "timer", "start", "--task", "28989564", "--description", "Smoke")
@@ -55,14 +61,32 @@ func TestTimerStart_WithTaskID(t *testing.T) {
 	if !strings.Contains(out, "Timer 74121 started") {
 		t.Errorf("unexpected output: %q", out)
 	}
-	if len(srv.calls) != 1 {
-		t.Fatalf("calls = %+v", srv.calls)
+	// Locate the POST /timers.json call (task lookup fires first).
+	var postBody string
+	for _, c := range srv.calls {
+		if c.Method == "POST" && c.Path == "/projects/api/v3/me/timers.json" {
+			postBody = c.Body
+		}
 	}
-	if !strings.Contains(srv.calls[0].Body, `"taskId":28989564`) {
-		t.Errorf("body = %q, missing taskId", srv.calls[0].Body)
+	if postBody == "" {
+		t.Fatalf("no POST to timers.json; calls = %+v", srv.calls)
 	}
-	if !strings.Contains(srv.calls[0].Body, `"description":"Smoke"`) {
-		t.Errorf("body = %q, missing description", srv.calls[0].Body)
+	if !strings.Contains(postBody, `"description":"Smoke"`) {
+		t.Errorf("body = %q, missing description", postBody)
+	}
+	// v3 timer endpoint accepts isBillable, not billable (the bare name 400s).
+	if !strings.Contains(postBody, `"isBillable":`) {
+		t.Errorf("body = %q, missing isBillable", postBody)
+	}
+	if strings.Contains(postBody, `"billable":`) {
+		t.Errorf("body = %q, should not send raw billable key", postBody)
+	}
+	if !strings.Contains(postBody, `"taskId":28989564`) {
+		t.Errorf("body = %q, missing taskId", postBody)
+	}
+	// projectId must be derived from the task so /complete.json works later.
+	if !strings.Contains(postBody, `"projectId":445082`) {
+		t.Errorf("body = %q, expected projectId derived from task", postBody)
 	}
 }
 
@@ -77,9 +101,11 @@ func TestTimerStart_RequiresTaskOrProject(t *testing.T) {
 	}
 }
 
-func TestTimerStop_PutsStopEndpoint(t *testing.T) {
+func TestTimerStop_PutsCompleteEndpoint(t *testing.T) {
+	// v3 "stop and log" is served by /complete.json. The old /stop.json
+	// path returned 404.
 	srv := newTestServer(t)
-	srv.handle("PUT", "/projects/api/v3/me/timers/74120/stop.json", `{"STATUS":"OK"}`)
+	srv.handle("PUT", "/projects/api/v3/me/timers/74120/complete.json", `{"STATUS":"OK"}`)
 
 	out, _, code := runCLI(t, srv, "timer", "stop", "74120")
 	if code != 0 {
@@ -87,6 +113,9 @@ func TestTimerStop_PutsStopEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(out, "74120 stopped") {
 		t.Errorf("unexpected: %q", out)
+	}
+	if len(srv.calls) != 1 || srv.calls[0].Path != "/projects/api/v3/me/timers/74120/complete.json" {
+		t.Errorf("expected PUT to /complete.json, got calls = %+v", srv.calls)
 	}
 }
 

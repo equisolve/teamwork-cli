@@ -212,7 +212,12 @@ func runTimeLog(cmd *cobra.Command, args []string) {
 	if id == "" {
 		id = resp.ID
 	}
-	fmt.Printf("Logged %dh %02dm on %s", h, m, date)
+	// `date` is YYYYMMDD for the API; render ISO for humans.
+	displayDate := date
+	if len(date) == 8 {
+		displayDate = date[:4] + "-" + date[4:6] + "-" + date[6:]
+	}
+	fmt.Printf("Logged %dh %02dm on %s", h, m, displayDate)
 	if id != "" {
 		fmt.Printf(" (entry %s)", id)
 	}

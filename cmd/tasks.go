@@ -218,7 +218,7 @@ func runTasksShow(cmd *cobra.Command, args []string) {
 		{"Progress", "progress"},
 		{"Start", "startDate"},
 		{"Due", "dueDate"},
-		{"Estimated min", "estimatedMinutes"},
+		{"Estimated min", "estimateMinutes"},
 		{"Created", "createdAt"},
 		{"Updated", "updatedAt"},
 	}

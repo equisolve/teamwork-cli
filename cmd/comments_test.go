@@ -7,9 +7,12 @@ import (
 
 func TestCommentsList_OnTask(t *testing.T) {
 	srv := newTestServer(t)
+	// v1 comments response uses author-firstname + author-lastname (there is
+	// no author-fullname field — the CLI used to read it and render blank).
 	srv.handle("GET", "/tasks/42/comments.json", `{
 		"comments": [
-			{"id": "1", "author-fullname": "Ada Lovelace", "datetime": "2026-04-22T10:00:00Z", "body": "Looks good"}
+			{"id": "1", "author-firstname": "Ada", "author-lastname": "Lovelace",
+			 "datetime": "2026-04-22T10:00:00Z", "body": "Looks good"}
 		]
 	}`)
 

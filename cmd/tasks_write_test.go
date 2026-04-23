@@ -90,17 +90,26 @@ func TestTasksUncomplete(t *testing.T) {
 }
 
 func TestTasksSubtasks_Add(t *testing.T) {
+	// v1 /tasks/<id>/quickadd.json only accepts a single "content" string
+	// (it was never the right endpoint for multiple subtasks — the wrapped
+	// `{"todo-item":{"content":...}}` shape it used returned a 400 anyway).
+	// We now split on newline / ~|~ and POST one v3 subtask per line.
 	srv := newTestServer(t)
-	srv.handle("POST", "/tasks/42/quickadd.json", `{"STATUS":"OK"}`)
+	srv.handle("POST", "/projects/api/v3/tasks/42/subtasks.json", `{"task":{"id":1}}`)
+
 	out, _, code := runCLI(t, srv, "tasks", "subtasks", "42", "--add", "one\ntwo\nthree")
 	if code != 0 {
 		t.Fatal(code)
 	}
-	if !strings.Contains(out, "Subtasks added") {
+	if !strings.Contains(out, "Added 3 subtask(s)") {
 		t.Errorf("out = %q", out)
 	}
-	body := srv.calls[0].Body
-	if !strings.Contains(body, "one") || !strings.Contains(body, "three") {
-		t.Errorf("body = %q", body)
+	if len(srv.calls) != 3 {
+		t.Fatalf("expected 3 POSTs, got %d: %+v", len(srv.calls), srv.calls)
+	}
+	for i, want := range []string{"one", "two", "three"} {
+		if !strings.Contains(srv.calls[i].Body, `"name":"`+want+`"`) {
+			t.Errorf("call %d body missing name=%q: %q", i, want, srv.calls[i].Body)
+		}
 	}
 }

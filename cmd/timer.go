@@ -145,7 +145,7 @@ func runTimerStart(cmd *cobra.Command, args []string) {
 
 	timer := map[string]interface{}{
 		"description": desc,
-		"billable":    billable,
+		"isBillable":  billable,
 	}
 
 	if taskQuery != "" {
@@ -154,6 +154,11 @@ func runTimerStart(cmd *cobra.Command, args []string) {
 			exitOnError(err)
 		}
 		timer["taskId"] = taskID
+		// v3 timers require projectId — it isn't auto-derived from taskId,
+		// and /complete.json later rejects timers with projectId=0.
+		if pid, err := lookupTaskProject(client, taskID); err == nil && pid > 0 {
+			timer["projectId"] = pid
+		}
 	} else if projectQuery != "" {
 		pid, err := getResolver().Project(projectQuery)
 		if err != nil {
@@ -187,10 +192,39 @@ func runTimerStart(cmd *cobra.Command, args []string) {
 
 func runTimerStop(cmd *cobra.Command, args []string) {
 	client := getClient()
-	if _, err := client.Put("/projects/api/v3/me/timers/"+args[0]+"/stop.json", nil, nil); err != nil {
+	// v3 calls the stop-and-log operation "complete", not "stop".
+	if _, err := client.Put("/projects/api/v3/me/timers/"+args[0]+"/complete.json", nil, nil); err != nil {
 		exitOnError(err)
 	}
 	fmt.Printf("Timer %s stopped and logged.\n", args[0])
+}
+
+// lookupTaskProject fetches a task's project ID. The v3 task resource has no
+// top-level projectId — the project is sideloaded when ?include=projects, so
+// we read the single key under included.projects.
+func lookupTaskProject(client *api.Client, taskID int) (int, error) {
+	params := url.Values{}
+	params.Set("include", "projects")
+	data, err := client.Get(fmt.Sprintf("/projects/api/v3/tasks/%d.json", taskID), params)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Included struct {
+			Projects map[string]struct {
+				ID int `json:"id"`
+			} `json:"projects"`
+		} `json:"included"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return 0, err
+	}
+	for _, p := range resp.Included.Projects {
+		if p.ID > 0 {
+			return p.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("task %d: no project in included sideload", taskID)
 }
 
 func runTimerPause(cmd *cobra.Command, args []string) {
