@@ -1,6 +1,6 @@
 BINARY=teamwork
 ALIAS=tw
-VERSION?=0.2.3
+VERSION?=0.3.0
 
 .PHONY: build install uninstall clean all test
 

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -37,8 +40,9 @@ func (e *APIError) Error() string {
 }
 
 // do builds a request, applies basic auth (apikey:x), and returns the raw body
-// on 2xx, or an APIError otherwise.
-func (c *Client) do(method, path string, params url.Values, body io.Reader) (json.RawMessage, error) {
+// on 2xx, or an APIError otherwise. If contentType is empty and a body is
+// present the request defaults to application/json.
+func (c *Client) do(method, path string, params url.Values, body io.Reader, contentType string) (json.RawMessage, error) {
 	u := c.BaseURL + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
@@ -51,7 +55,10 @@ func (c *Client) do(method, path string, params url.Values, body io.Reader) (jso
 	req.SetBasicAuth(c.Token, "x")
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
@@ -99,19 +106,43 @@ func extractError(body []byte) string {
 }
 
 func (c *Client) Get(path string, params url.Values) (json.RawMessage, error) {
-	return c.do("GET", path, params, nil)
+	return c.do("GET", path, params, nil, "")
 }
 
 func (c *Client) Post(path string, params url.Values, payload interface{}) (json.RawMessage, error) {
-	return c.do("POST", path, params, marshalBody(payload))
+	return c.do("POST", path, params, marshalBody(payload), "")
 }
 
 func (c *Client) Put(path string, params url.Values, payload interface{}) (json.RawMessage, error) {
-	return c.do("PUT", path, params, marshalBody(payload))
+	return c.do("PUT", path, params, marshalBody(payload), "")
 }
 
 func (c *Client) Delete(path string, params url.Values) (json.RawMessage, error) {
-	return c.do("DELETE", path, params, nil)
+	return c.do("DELETE", path, params, nil, "")
+}
+
+// Upload POSTs a single file as multipart/form-data on the given field name.
+// Used for endpoints like /pendingfiles.json that don't accept JSON bodies.
+func (c *Client) Upload(path, fieldName, filePath string) (json.RawMessage, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("could not open %s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, err := w.CreateFormFile(fieldName, filepath.Base(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("could not build multipart body: %w", err)
+	}
+	if _, err := io.Copy(part, f); err != nil {
+		return nil, fmt.Errorf("could not read %s: %w", filePath, err)
+	}
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("could not close multipart body: %w", err)
+	}
+	return c.do("POST", path, nil, &buf, w.FormDataContentType())
 }
 
 func marshalBody(payload interface{}) io.Reader {

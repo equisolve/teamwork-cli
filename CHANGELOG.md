@@ -2,6 +2,22 @@
 
 All notable changes to `teamwork-cli`. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.0] — 2026-05-06
+
+Promotes the patterns documented in the `eq-agent-skills` teamwork-cli skill (PR #5) from copy-paste bash recipes to first-class CLI commands. The skill should now be a thin pointer at the CLI rather than a bash cookbook.
+
+### Added
+- **`tasks complete`** is now batch-aware. Pass any number of IDs (`tasks complete 1 2 3`), or pipe them from `jq` with `--from-stdin`. `--continue-on-error` keeps going past failures and prints a summary; `--with-predecessors` recursively closes incomplete predecessor tasks before retrying. A 422 with a predecessor message now suggests the flag in stderr.
+- **`tasks show`** renders a `Predecessors:` line listing predecessor task IDs with a ⚠ marker on any that are still open.
+- **`tasks list --tasklist <id>`** filter, so you can pull every task in a list without going through `--project` first.
+- **`tasks sweep`** new command. Buckets the open tasks of a list into Done / N/A / QA / Blocked by name prefix and optionally batch-closes named buckets (`--close done`, repeatable). Default is dry-run; `--comment "N/A for this site type"` posts a comment before closing each task; `--with-predecessors` carries through. Use `--tasklist <id>` or `--project + --list-name`.
+- **`notebooks show --content`** prints just the HTML body. `--plain` strips tags. `--section "Database"` extracts a single `<h2>`-titled section (case-insensitive substring). v3 responses without a body now transparently fall back to v1 `/notebooks/<id>.json?includeContent=true`.
+- **`files upload`** new command. Native two-step v1 upload (POST `/pendingfiles.json` → POST `/projects/<id>/files.json`) so callers no longer need a curl fallback. Required flags: `--project`, `--file`. Optional `--description`, `--category`.
+
+### Improved
+- The `api.Client` gained a generic `Upload(path, fieldName, filePath)` for multipart POSTs, and the existing JSON helpers grew an internal content-type parameter — used by the new uploader and available for future endpoints.
+- The dry-run-by-default ergonomics on `tasks sweep` mean you can safely run it against any client project without writing.
+
 ## [v0.2.3] — 2026-04-23
 
 Six more bugs surfaced by a second round of live testing.

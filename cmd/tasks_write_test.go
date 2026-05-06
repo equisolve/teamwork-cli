@@ -89,6 +89,75 @@ func TestTasksUncomplete(t *testing.T) {
 	}
 }
 
+func TestTasksSweep_DryRunBuckets(t *testing.T) {
+	srv := newTestServer(t)
+	srv.handle("GET", "/projects/api/v3/tasks.json", `{
+		"tasks": [
+			{"id": 1, "name": "Done: ship homepage", "status": "new"},
+			{"id": 2, "name": "N/A: legacy CMS export", "status": "new"},
+			{"id": 3, "name": "QA: navigation review", "status": "new"},
+			{"id": 4, "name": "Wire up product feed", "status": "new"},
+			{"id": 5, "name": "Already shipped", "status": "completed"}
+		],
+		"meta": {"page": {"count": 5}}
+	}`)
+
+	out, errOut, code := runCLI(t, srv, "tasks", "sweep", "--tasklist", "999")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errOut)
+	}
+	for _, want := range []string{
+		"Done (1)", "N/A (1)", "QA (1)", "Blocked (0)",
+		"Unbucketed (1)", "Wire up product feed",
+		"Dry run only", // status reminder
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output:\n%s", want, out)
+		}
+	}
+	// Completed tasks shouldn't appear at all.
+	if strings.Contains(out, "Already shipped") {
+		t.Errorf("completed task leaked into sweep output:\n%s", out)
+	}
+}
+
+func TestTasksSweep_CloseBucket(t *testing.T) {
+	srv := newTestServer(t)
+	srv.handle("GET", "/projects/api/v3/tasks.json", `{
+		"tasks": [
+			{"id": 1, "name": "Done: ship homepage", "status": "new"},
+			{"id": 2, "name": "QA: footer", "status": "new"}
+		],
+		"meta": {"page": {"count": 2}}
+	}`)
+	srv.handle("PUT", "/tasks/1/complete.json", `{"STATUS":"OK"}`)
+
+	out, errOut, code := runCLI(t, srv,
+		"tasks", "sweep", "--tasklist", "999", "--close", "done", "--yes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errOut)
+	}
+	if !strings.Contains(out, "Closed 1 of 1") {
+		t.Errorf("expected close summary, got %q", out)
+	}
+	// QA task should have been left alone — verify the only PUT was for task 1.
+	saw1, sawOther := false, false
+	for _, c := range srv.calls {
+		if c.Method != "PUT" {
+			continue
+		}
+		switch c.Path {
+		case "/tasks/1/complete.json":
+			saw1 = true
+		default:
+			sawOther = true
+		}
+	}
+	if !saw1 || sawOther {
+		t.Errorf("expected only PUT /tasks/1/complete.json, calls=%+v", srv.calls)
+	}
+}
+
 func TestTasksSubtasks_Add(t *testing.T) {
 	// v1 /tasks/<id>/quickadd.json only accepts a single "content" string
 	// (it was never the right endpoint for multiple subtasks — the wrapped

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/equisolve/teamwork-cli/internal/api"
 	"github.com/equisolve/teamwork-cli/internal/format"
@@ -14,7 +15,7 @@ import (
 var filesCmd = &cobra.Command{
 	Use:     "files",
 	Aliases: []string{"file"},
-	Short:   "List and view project files (no upload)",
+	Short:   "List, view, and upload project files",
 }
 
 var filesListCmd = &cobra.Command{
@@ -30,12 +31,26 @@ var filesShowCmd = &cobra.Command{
 	Run:   runFilesShow,
 }
 
+var filesUploadCmd = &cobra.Command{
+	Use:   "upload",
+	Short: "Upload a file and attach it to a project",
+	Long: `Two-step v1 upload: POST the bytes to /pendingfiles.json, then attach
+the returned ref to /projects/<id>/files.json. Files must attach to a project
+(Teamwork's task-file endpoint is unreliable).`,
+	Run: runFilesUpload,
+}
+
 func init() {
 	filesListCmd.Flags().StringP("project", "p", "", "Filter by project ID or name")
 	filesListCmd.Flags().Int("page", 1, "Page number")
 	filesListCmd.Flags().Int("page-size", 25, "Results per page")
 
-	filesCmd.AddCommand(filesListCmd, filesShowCmd)
+	filesUploadCmd.Flags().StringP("project", "p", "", "Project ID or name (required)")
+	filesUploadCmd.Flags().String("file", "", "Path to the file to upload (required)")
+	filesUploadCmd.Flags().String("description", "", "Optional description for the file")
+	filesUploadCmd.Flags().StringSlice("category", nil, "Category ID(s) to attach the file to (repeatable)")
+
+	filesCmd.AddCommand(filesListCmd, filesShowCmd, filesUploadCmd)
 	rootCmd.AddCommand(filesCmd)
 }
 
@@ -149,6 +164,90 @@ func runFilesList(cmd *cobra.Command, args []string) {
 		format.PrintTable(os.Stdout, headers, rows)
 		fmt.Printf("\nPage %d · %d of %d file(s)\n", page, len(resp.Files), resp.Meta.Page.Count)
 	}
+}
+
+func runFilesUpload(cmd *cobra.Command, args []string) {
+	client := getClient()
+	projectQ, _ := cmd.Flags().GetString("project")
+	path, _ := cmd.Flags().GetString("file")
+	desc, _ := cmd.Flags().GetString("description")
+	cats, _ := cmd.Flags().GetStringSlice("category")
+
+	if projectQ == "" || path == "" {
+		fmt.Fprintln(os.Stderr, "Error: --project and --file are required")
+		exitFn(1)
+	}
+	pid, err := getResolver().Project(projectQ)
+	if err != nil {
+		exitOnError(err)
+	}
+
+	// Step 1: pending upload (multipart). The response shape varies — older
+	// servers return {"pendingFile":{"ref":"…"}}, newer ones drop the wrapper
+	// and put ref/pendingFileRef at the top level.
+	pending, err := client.Upload("/pendingfiles.json", "file", path)
+	if err != nil {
+		exitOnError(err)
+	}
+	ref := pendingFileRef(pending)
+	if ref == "" {
+		fmt.Fprintln(os.Stderr, "Error: upload succeeded but no pendingFileRef returned:", string(pending))
+		exitFn(1)
+	}
+
+	// Step 2: attach to the project.
+	attach := map[string]interface{}{"pendingFileRef": ref}
+	if desc != "" {
+		attach["description"] = desc
+	}
+	if len(cats) > 0 {
+		attach["category-ids"] = strings.Join(cats, ",")
+	}
+	payload := map[string]interface{}{"file": attach}
+
+	resp, err := client.Post(fmt.Sprintf("/projects/%d/files.json", pid), nil, payload)
+	if err != nil {
+		exitOnError(err)
+	}
+	var attached struct {
+		FileID  json.Number `json:"fileId"`
+		ID      json.Number `json:"id"`
+		Status  string      `json:"STATUS"`
+	}
+	_ = json.Unmarshal(resp, &attached)
+	id := attached.FileID.String()
+	if id == "" {
+		id = attached.ID.String()
+	}
+	if id == "" {
+		fmt.Printf("Uploaded %s to project %d.\n", path, pid)
+	} else {
+		fmt.Printf("Uploaded %s as file %s on project %d.\n", path, id, pid)
+	}
+}
+
+// pendingFileRef pulls the pending upload reference from the various response
+// shapes Teamwork returns from /pendingfiles.json.
+func pendingFileRef(body json.RawMessage) string {
+	var top struct {
+		Ref            string `json:"ref"`
+		PendingFileRef string `json:"pendingFileRef"`
+		PendingFile    struct {
+			Ref string `json:"ref"`
+		} `json:"pendingFile"`
+	}
+	if err := json.Unmarshal(body, &top); err == nil {
+		if top.Ref != "" {
+			return top.Ref
+		}
+		if top.PendingFileRef != "" {
+			return top.PendingFileRef
+		}
+		if top.PendingFile.Ref != "" {
+			return top.PendingFile.Ref
+		}
+	}
+	return ""
 }
 
 func runFilesShow(cmd *cobra.Command, args []string) {

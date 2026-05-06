@@ -47,11 +47,13 @@ teamwork projects list [--status active|archived|all] [--company ID]
                        [--search TERM] [--page N] [--page-size N]
 teamwork projects show <id>
 
-teamwork tasks list [--project ID|name] [--assignee ID|name|email|me]
+teamwork tasks list [--project ID|name] [--tasklist ID]
+                    [--assignee ID|name|email|me]
                     [--status new|reopened|completed] [--completed]
                     [--due-from YYYY-MM-DD] [--due-to YYYY-MM-DD]
-teamwork tasks show <id>
-teamwork tasks complete <id>
+teamwork tasks show <id>                                  # also lists predecessors
+teamwork tasks complete <id>...                           # accepts multiple IDs
+       [--from-stdin] [--continue-on-error] [--with-predecessors]
 teamwork tasks uncomplete <id>
 teamwork tasks create --tasklist <id> --name "..."
                      [--description] [--assignee me|name|ID]
@@ -61,9 +63,29 @@ teamwork tasks update <id> [--name] [--description] [--assignee]
                            [--due] [--start] [--priority] [--estimate]
 teamwork tasks delete <id> [--yes]
 teamwork tasks subtasks <parent-id> [--add "line1\nline2"]
+teamwork tasks sweep --tasklist <id>
+       [--project NAME --list-name "Front End"]           # alt: resolve by name
+       [--close done|na|qa|blocked]                        # repeatable, omit for dry-run
+       [--comment "N/A for this site type"] [--yes] [--with-predecessors]
 
 teamwork tasklists list --project <id|name> [--completed]
 teamwork tasklists show <id>
+```
+
+#### Batch-close patterns
+
+```bash
+# Close a hand-picked set
+teamwork tasks complete 12345 12346 12347
+
+# Close every task with name starting "Done:" in a list
+teamwork tasks list --tasklist 1702954 --json \
+  | jq -r '.tasks[] | select(.status != "completed") | select(.name | test("^Done:")) | .id' \
+  | teamwork tasks complete --from-stdin --continue-on-error
+
+# Front-End Development sweep — dry-run, then close out the obvious buckets
+teamwork tasks sweep --project "Acme" --list-name "Front End"
+teamwork tasks sweep --project "Acme" --list-name "Front End" --close done --close na --yes
 ```
 
 ### Time & timers
@@ -105,9 +127,13 @@ teamwork messages show <id>
 
 teamwork files list [--project ID|name]
 teamwork files show <id>
+teamwork files upload --project <id|name> --file <path>
+                      [--description "…"] [--category ID]
 
 teamwork notebooks list [--project ID|name]
-teamwork notebooks show <id>
+teamwork notebooks show <id>                              # body + metadata
+teamwork notebooks show <id> --content [--plain]          # body only (HTML or stripped)
+teamwork notebooks show <id> --content --plain --section "Database"
 
 teamwork links list --project <id|name>
 teamwork links show <id>
@@ -162,8 +188,11 @@ teamwork portfolio boards show <id>
   otherwise. HTTP Basic auth with API-key as username, literal `x` as password.
 - Name resolution: pass `--project "Accounting"` or `--assignee ada@…` and
   the CLI hits `?searchTerm=` to map it to an ID. Resolutions are cached.
-- No file upload, no webhook management, no custom-field writes, no Teamwork
-  project create/update/delete — out of scope for this build. Add when needed.
+- File uploads land via `files upload` (two-step v1: `pendingfiles.json` →
+  `projects/<id>/files.json`). Files attach to projects; the per-task file
+  endpoint is unreliable in v1.
+- No webhook management, no custom-field writes, no Teamwork project
+  create/update/delete — out of scope for this build. Add when needed.
 
 ## Tests
 
