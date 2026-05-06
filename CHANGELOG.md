@@ -2,6 +2,11 @@
 
 All notable changes to `teamwork-cli`. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.1] — 2026-05-06
+
+### Fixed
+- **`teamwork version`** printed `dev` for anyone installing from source via `make build` / `make install`. The Makefile now injects the version through `-ldflags -X github.com/equisolve/teamwork-cli/cmd.version=$(VERSION)`, matching what goreleaser already does for release tarballs. Skills and docs that key off `teamwork version` now read the real version regardless of install path.
+
 ## [v0.3.0] — 2026-05-06
 
 Promotes the patterns documented in the `eq-agent-skills` teamwork-cli skill (PR #5) from copy-paste bash recipes to first-class CLI commands. The skill should now be a thin pointer at the CLI rather than a bash cookbook.
