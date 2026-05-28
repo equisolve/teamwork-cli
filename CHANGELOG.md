@@ -2,6 +2,11 @@
 
 All notable changes to `teamwork-cli`. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.4.0] — 2026-05-28
+
+### Added
+- **`teamwork api <path>`** new command — a raw escape hatch to any Teamwork endpoint with auth, base URL, and JSON formatting handled. `-X/--method` sets the verb (default `GET`), `-q/--query key=value` adds repeatable query params, and `-d/--data` takes a literal JSON body, `@file`, or `-` for stdin. A leading `/` is added to the path if missing. Covers endpoints without a dedicated command (webhooks, custom-field writes) so callers no longer need a `curl` fallback.
+
 ## [v0.3.1] — 2026-05-06
 
 ### Fixed

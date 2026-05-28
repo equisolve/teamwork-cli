@@ -105,6 +105,22 @@ func extractError(body []byte) string {
 	return ""
 }
 
+// Raw performs an arbitrary request against the configured Teamwork instance.
+// method is an HTTP verb, path is the endpoint path (a leading "/" is added if
+// missing), params are query-string values, and body is an optional raw request
+// body (sent as application/json unless empty). It returns the raw response
+// body, used by the `teamwork api` escape-hatch command.
+func (c *Client) Raw(method, path string, params url.Values, body string) (json.RawMessage, error) {
+	if path != "" && !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	var r io.Reader
+	if body != "" {
+		r = strings.NewReader(body)
+	}
+	return c.do(strings.ToUpper(method), path, params, r, "")
+}
+
 func (c *Client) Get(path string, params url.Values) (json.RawMessage, error) {
 	return c.do("GET", path, params, nil, "")
 }

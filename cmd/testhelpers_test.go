@@ -19,7 +19,13 @@ import (
 func resetFlagsRecursive(c *cobra.Command) {
 	c.Flags().VisitAll(func(f *pflag.Flag) {
 		if f.Changed {
-			_ = f.Value.Set(f.DefValue)
+			// Slice flags (e.g. StringArray) append on Set, so resetting via
+			// Set(DefValue) would leak values across runs — clear them properly.
+			if sv, ok := f.Value.(pflag.SliceValue); ok {
+				_ = sv.Replace(nil)
+			} else {
+				_ = f.Value.Set(f.DefValue)
+			}
 			f.Changed = false
 		}
 	})

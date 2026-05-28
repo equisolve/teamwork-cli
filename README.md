@@ -170,6 +170,22 @@ teamwork portfolio boards list
 teamwork portfolio boards show <id>
 ```
 
+### Raw API access
+For any endpoint without a dedicated command, hit the API directly. Auth, base
+URL, and JSON formatting are handled for you.
+```
+teamwork api /me.json
+teamwork api /projects.json -q "status=active" -q "page=2"
+teamwork api -X POST -d '{"todo-item":{"content":"Hi"}}' /tasks/123/todo-items.json
+teamwork api -X PUT -d @payload.json /tasks/123.json
+echo '{...}' | teamwork api -X POST -d - /tasks/123/todo-items.json
+teamwork api -X DELETE /tasks/123.json
+
+  -X, --method   HTTP method (default GET)
+  -q, --query    query param key=value (repeatable)
+  -d, --data     request body: literal JSON, @file, or - for stdin
+```
+
 ### Global flags
 
 ```
