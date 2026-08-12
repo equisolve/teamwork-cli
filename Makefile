@@ -1,6 +1,6 @@
 BINARY=teamwork
 ALIAS=tw
-VERSION?=0.4.0
+VERSION?=0.5.0
 LDFLAGS=-s -w -X github.com/equisolve/teamwork-cli/cmd.version=$(VERSION)
 
 .PHONY: build install uninstall clean all test

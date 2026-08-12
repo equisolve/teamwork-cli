@@ -2,6 +2,15 @@
 
 All notable changes to `teamwork-cli`. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.0] — 2026-08-12
+
+### Added
+- **`files upload --task <id|name>`** attaches files to the task itself, not just its project. `--project` puts a file in the project's Files list linked to no task; `--task` makes it show up in the task's own Files section. Exactly one of the two is required. `--file` is now repeatable, and with `--task` every file rides in a single attach call.
+- **`files upload --reopen`** handles completed tasks. Teamwork answers an attach on a completed task with `Your user account does not have permission for this action`, naming neither the task nor its state; the command now checks the status before spending the upload, refuses with a message that names the cause and the fix, and with `--reopen` does uncomplete → attach → re-complete. The task is re-completed even when the attach fails, so a failure never leaves it open.
+
+### Notes
+- Task attachment goes through `PUT /tasks/<id>.json` with `pendingFileAttachments`. On that endpoint `attachments` wants numeric file ids, and `attachmentIds` returns `"STATUS":"OK"` while attaching nothing.
+
 ## [v0.4.0] — 2026-05-28
 
 ### Added

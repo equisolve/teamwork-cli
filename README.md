@@ -127,8 +127,10 @@ teamwork messages show <id>
 
 teamwork files list [--project ID|name]
 teamwork files show <id>
-teamwork files upload --project <id|name> --file <path>
+teamwork files upload --project <id|name> --file <path>     # into the project's Files list
                       [--description "…"] [--category ID]
+teamwork files upload --task <id|name> --file <path>        # into the task's own Files section
+                      [--file <path> …] [--reopen]
 
 teamwork notebooks list [--project ID|name]
 teamwork notebooks show <id>                              # body + metadata
@@ -204,9 +206,9 @@ teamwork api -X DELETE /tasks/123.json
   otherwise. HTTP Basic auth with API-key as username, literal `x` as password.
 - Name resolution: pass `--project "Accounting"` or `--assignee ada@…` and
   the CLI hits `?searchTerm=` to map it to an ID. Resolutions are cached.
-- File uploads land via `files upload` (two-step v1: `pendingfiles.json` →
-  `projects/<id>/files.json`). Files attach to projects; the per-task file
-  endpoint is unreliable in v1.
+- File uploads are two-step v1: POST the bytes to `pendingfiles.json`, then attach the returned ref. `--project` attaches via `POST /projects/<id>/files.json`, which puts the file in the project's Files list linked to no task. `--task` attaches via `PUT /tasks/<id>.json` with `pendingFileAttachments`, which is what makes the file appear in the task's own Files section (`relatedItems.tasks`). The v1 per-task file endpoint (`/tasks/<id>/files.json`) is unreliable and is not used.
+- On a task update, `pendingFileAttachments` takes pending refs and `attachments` takes numeric file ids. `attachmentIds` is accepted with `"STATUS":"OK"` and silently attaches nothing.
+- Teamwork rejects an attach on a **completed** task with `Your user account does not have permission for this action`, which names neither the task nor its state. `files upload --task` checks the status first and tells you to pass `--reopen`.
 - No webhook management, no custom-field writes, no Teamwork project
   create/update/delete — out of scope for this build. Add when needed.
 
